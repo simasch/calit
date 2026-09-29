@@ -16,19 +16,25 @@ Skills live in `.agents/skills/`; `.claude/skills/` and `.crush/skills/` are sym
 
 ### Issue tracker
 
-Issues are beans in `.beans/` (agentic-first tracker, `beans` CLI). See `docs/agents/issue-tracker.md`.
+Issues are GitHub issues on the repository.
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root.
 
-A decision that lands in `docs/adr/`, in a `docs/superpowers/specs/` design, or in `CONTEXT.md` is
+### Specifications
+
+AI Unified Process artifacts live in `docs/`: `requirements.md`, `glossary.md`, `use_cases.puml`,
+`use_cases/UC-*.md` and `entity_model.md`. They were reverse-engineered from the code and describe
+implemented behaviour; where the code has a known defect, the use case records it as-is. A
+behaviour change updates the affected use case in the same change. `/spec-review` lints them.
+
+A decision that lands in `docs/adr/` or in `CONTEXT.md` is
 also cross-project memory: mirror it into the **precedent** graph in the same change (`precedent
 check --topic <t> --chose <o>` first to avoid a duplicate, then `precedent record` with `--rejected`
 and `--rationale` — the rejected alternatives and the why are the half that gets quoted back).
-The ADR holds the why for calit; the graph holds it for the next project. `.claude/hooks/precedent-nudge.sh`
-(PostToolUse) fires the reminder on those paths. Skip a mechanical call you made yourself — record
-what was actually settled.
+The ADR holds the why for calit; the graph holds it for the next project. Skip a mechanical call you
+made yourself — record what was actually settled.
 
 ## Build & run
 
@@ -137,7 +143,7 @@ Flyway migrations in `src/main/resources/db/migration/`, applied at boot (`quark
 
 ## Docker / CI
 
-`Dockerfile` multi-stage: Bun compiles CSS → BellSoft **Liberica JDK 26** builds → BellSoft **hardened distroless Liberica JRE (musl)** runs. Tests skipped in image — run `mvn test` on host (with Docker) before building. CI is `.github/workflows/ci.yml` (test/build/merge/release; multi-arch JVM images plus `-native`-suffixed GraalVM images from `Dockerfile.native`, pushed to `ghcr.io/asm0dey/calit` and mirrored to `docker.io/asm0dey/calit`). Dependency updates via **Renovate** (`renovate.json`), not Dependabot. A `customManagers` regex also bumps the Quarkus version quoted in `README.md` (badge) and at the top of this file — keep both in the full `X.Y.Z` form or the regex stops matching. The `changes` job gates the image matrix: a push to `main` that touched only `.beans/**`, root-level markdown (`README.md`, `CLAUDE.md`, …), `docs/**`, `.agents/**`, `.claude/**` or `LICENSE` builds no image and publishes no `edge`/`sha-*` tag — that is intentional, not a broken run. `v*` tag pushes always build.
+`Dockerfile` multi-stage: Bun compiles CSS → BellSoft **Liberica JDK 26** builds → BellSoft **hardened distroless Liberica JRE (musl)** runs. Tests skipped in image — run `mvn test` on host (with Docker) before building. CI is `.github/workflows/ci.yml` (test/build/merge/release; multi-arch JVM images plus `-native`-suffixed GraalVM images from `Dockerfile.native`, pushed to `ghcr.io/asm0dey/calit` and mirrored to `docker.io/asm0dey/calit`). Dependency updates via **Renovate** (`renovate.json`), not Dependabot. A `customManagers` regex also bumps the Quarkus version quoted in `README.md` (badge) and at the top of this file — keep both in the full `X.Y.Z` form or the regex stops matching. The `changes` job gates the image matrix: a push to `main` that touched only root-level markdown (`README.md`, `CLAUDE.md`, …), `docs/**`, `.agents/**`, `.claude/**` or `LICENSE` builds no image and publishes no `edge`/`sha-*` tag — that is intentional, not a broken run. `v*` tag pushes always build.
 
 ## Documentation
 
@@ -155,4 +161,3 @@ Compress wording, never facts. These always survive into the bullet: migration i
 
 Close each section with an upgrade note: `Upgrade: nothing to do.` when there is nothing to do and no caveat, otherwise one or two sentences saying what to do or what to watch for.
 
-**IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
