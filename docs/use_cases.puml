@@ -1,0 +1,66 @@
+@startuml Use Cases Overview
+left to right direction
+
+actor "Operator" as operator
+actor "Visitor" as visitor
+actor "Invitee" as invitee
+actor "Guest" as guest
+actor "Owner" as owner
+actor "Co-host" as cohost
+actor "Site Administrator" as admin
+actor "Scheduler" as scheduler
+
+admin -|> owner
+cohost -|> owner
+
+rectangle "calit" {
+    usecase "UC-001\nBook a Meeting" as UC001
+    usecase "UC-002\nManage Own Booking" as UC002
+    usecase "UC-003\nAccess or Erase Booking Data" as UC003
+    usecase "UC-004\nDecline Guest Invitation" as UC004
+    usecase "UC-005\nBootstrap Instance" as UC005
+    usecase "UC-006\nSign Up" as UC006
+    usecase "UC-007\nSign In" as UC007
+    usecase "UC-008\nReset Password" as UC008
+    usecase "UC-009\nComplete First-Login Setup" as UC009
+    usecase "UC-010\nManage Meeting Types" as UC010
+    usecase "UC-011\nManage Availability" as UC011
+    usecase "UC-012\nShare Meeting Type with Co-hosts" as UC012
+    usecase "UC-013\nParticipate as Co-host" as UC013
+    usecase "UC-014\nHandle Bookings" as UC014
+    usecase "UC-015\nManage Account Settings and Data" as UC015
+    usecase "UC-016\nManage Notification Channels" as UC016
+    usecase "UC-017\nConnect Google Calendar" as UC017
+    usecase "UC-018\nAdminister Users" as UC018
+    usecase "UC-019\nSend Reminders and Retry Mail" as UC019
+    usecase "UC-020\nExpire Unanswered Booking Requests" as UC020
+    usecase "UC-021\nMonitor Google Connections" as UC021
+    usecase "UC-022\nEnforce Data Retention" as UC022
+}
+
+invitee --> UC001
+invitee --> UC002
+invitee --> UC003
+guest --> UC004
+operator --> UC005
+visitor --> UC006
+owner --> UC007
+owner --> UC008
+owner --> UC009
+owner --> UC010
+owner --> UC011
+owner --> UC012
+cohost --> UC013
+owner --> UC014
+owner --> UC015
+owner --> UC016
+owner --> UC017
+admin --> UC018
+scheduler --> UC019
+scheduler --> UC020
+scheduler --> UC021
+scheduler --> UC022
+
+UC003 ..> UC002 : <<extend>>
+
+@enduml
