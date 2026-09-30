@@ -12,11 +12,11 @@ has no time-only type. Every `DateTime` is an absolute instant (UTC).
 
 ```mermaid
 erDiagram
-    APP_USER ||--|| OWNER_SETTINGS : "configures"
+    APP_USER ||--o| OWNER_SETTINGS : "configures"
     APP_USER ||--o{ MEETING_TYPE : "creates"
     APP_USER ||--o{ MEETING_TYPE_HOST : "hosts as"
     MEETING_TYPE ||--o{ MEETING_TYPE_HOST : "is hosted by"
-    MEETING_TYPE ||--o{ MEETING_TYPE_DURATION : "may be booked for"
+    MEETING_TYPE ||--o{ MEETING_TYPE_DURATION : "tunes lengths with"
     APP_USER ||--o{ AVAILABILITY_RULE : "is available by"
     MEETING_TYPE |o--o{ AVAILABILITY_RULE : "overrides hours with"
     APP_USER ||--o{ DATE_OVERRIDE : "overrides dates with"
@@ -27,9 +27,11 @@ erDiagram
     APP_USER ||--o{ BOOKING : "is booked in"
     MEETING_TYPE ||--o{ BOOKING : "is booked as"
     BOOKING ||--o{ BOOKING_GUEST : "invites"
+    APP_USER ||--o{ BOOKING_GUEST : "owns"
     BOOKING ||--o{ REMINDER : "schedules"
     APP_USER ||--o{ GOOGLE_CREDENTIAL : "connects"
     GOOGLE_CREDENTIAL ||--o{ GOOGLE_CALENDAR : "exposes"
+    APP_USER ||--o{ GOOGLE_CALENDAR : "selects"
     GOOGLE_CREDENTIAL |o--o{ BOOKING : "stores event of"
     GOOGLE_CREDENTIAL |o--o{ MEETING_TYPE : "is write override of"
     GOOGLE_CREDENTIAL |o--o{ MEETING_TYPE_HOST : "is write override of"
@@ -46,6 +48,13 @@ erDiagram
 `DELETED_USERNAME` has no relationships: it records a deleted username without referring to any row.
 
 Deleting an `APP_USER` removes every row that refers to it through `owner_id` or `user_id` — settings, meeting types and their hosts, durations, questions, availability, date overrides, bookings, guests, reminders, Google accounts and calendars, notification channels, queued messages, sign-in tickets and reset tokens — except the queued messages exempted under `EMAIL_OUTBOX.owner_id`.
+
+It also reaches into other Owners' data, because deleting the account deletes its meeting types and everything that refers to a meeting type goes with it (`meeting_type_id` cascades). For each meeting type the deleted Owner created, this removes:
+
+- the Co-hosts' bookings of that type, with their guests, reminders and queued messages. Upcoming ones are cancelled first, so Invitees and guests are notified;
+- the Co-hosts' `MEETING_TYPE_HOST` rows for that type;
+- the Co-hosts' availability rules and date overrides scoped to that type;
+- other Owners' `NOTIFICATION_CHANNEL_MEETING_TYPE` links to that type.
 
 ### APP_USER
 
@@ -85,7 +94,7 @@ The per-Owner profile and preferences that shape the public page, emails and dat
 | booking_retention_days      | Days after a meeting before its Invitee data is erased; empty = instance default | Integer | 10          | Optional                              |
 | home_redirect_enabled       | Whether signing in at Home sends the Owner to their dashboard            | Boolean   | 1                | Not Null                              |
 
-**Constraints:** exactly one row per Owner (`owner_id` unique). `booking_retention_days` may be empty, meaning the instance default applies; when set it is capped at 36500. `owner_email` may be empty for a freshly created account until setup is completed.
+**Constraints:** at most one row per Owner (`owner_id` unique). The schema does not require a row: accounts created through `/setup` used to have none, which migration `V24` backfilled. Every account creation path now seeds one. `booking_retention_days` may be empty, meaning the instance default applies; when set it is capped at 36500. `owner_email` may be empty for a freshly created account until setup is completed.
 
 ### MEETING_TYPE
 
@@ -118,16 +127,16 @@ A bookable offering published by its Creator: default length, cadence, notice, h
 
 ### MEETING_TYPE_DURATION
 
-One additional length an Invitee may choose for a meeting type, optionally with its own buffers.
+One allowed length of a meeting type, optionally with its own buffers. The lengths an Invitee may choose are these rows plus the meeting type's own `duration_minutes`, which is always allowed whether or not a row names it (ADR-0003). A row may repeat the default `duration_minutes`; that row adds no new length and exists only to carry buffers for the default length. Deleting it removes those buffers, but the length stays allowed.
 
 | Attribute             | Description                                                    | Data Type | Length/Precision | Validation Rules                        |
 |-----------------------|----------------------------------------------------------------|-----------|------------------|-----------------------------------------|
-| meeting_type_id       | Meeting type the length belongs to                             | Long      | 19               | Not Null, Foreign Key (MEETING_TYPE.id) |
-| duration_minutes      | Meeting length in minutes                                      | Integer   | 10               | Not Null                                |
+| meeting_type_id       | Meeting type the length belongs to                             | Long      | 19               | Primary Key, Foreign Key (MEETING_TYPE.id) |
+| duration_minutes      | Meeting length in minutes                                      | Integer   | 10               | Primary Key, Min: 1                     |
 | buffer_before_minutes | Buffer before a meeting of this length; empty = none for this length | Integer   | 10               | Optional                                |
 | buffer_after_minutes  | Buffer after a meeting of this length; empty = none for this length  | Integer   | 10               | Optional                                |
 
-**Constraints:** the pair (`meeting_type_id`, `duration_minutes`) identifies a row. `duration_minutes` is greater than 0; buffers, when set, are 0 or more.
+**Constraints:** (`meeting_type_id`, `duration_minutes`) is the composite primary key. `duration_minutes` is greater than 0; buffers, when set, are 0 or more.
 
 ### MEETING_TYPE_HOST
 
@@ -358,7 +367,7 @@ A short-lived, single-use proof of identity that completes an external sign-in o
 |------------|---------------------------------------------|-----------|------------------|-------------------------------------|
 | id         | Unique identifier                           | Long      | 19               | Primary Key, Sequence               |
 | user_id    | User the ticket signs in                    | Long      | 19               | Not Null, Foreign Key (APP_USER.id) |
-| token_hash | One-way fingerprint of the ticket secret    | String    | 64               | Not Null, Unique                    |
+| token_hash | One-way fingerprint of the ticket secret (hex SHA-256, 64 characters) | String    | -                | Not Null, Unique                    |
 | expires_at | When the ticket stops being valid           | DateTime  | -                | Not Null                            |
 
 ### PASSWORD_RESET_TOKEN
@@ -369,7 +378,7 @@ A short-lived, single-use permission to set a new password, sent by email.
 |------------|---------------------------------------------|-----------|------------------|-------------------------------------|
 | id         | Unique identifier                           | Long      | 19               | Primary Key, Sequence               |
 | user_id    | User who asked for the reset                | Long      | 19               | Not Null, Foreign Key (APP_USER.id) |
-| token_hash | One-way fingerprint of the reset secret     | String    | 64               | Not Null, Unique                    |
+| token_hash | One-way fingerprint of the reset secret (hex SHA-256, 64 characters) | String    | -                | Not Null, Unique                    |
 | expires_at | When the reset link stops being valid       | DateTime  | -                | Not Null                            |
 
 ### DELETED_USERNAME
@@ -378,7 +387,7 @@ A fingerprint of a username whose account was deleted, kept so the handle is not
 
 | Attribute       | Description                                   | Data Type | Length/Precision | Validation Rules |
 |-----------------|-----------------------------------------------|-----------|------------------|------------------|
-| username_sha256 | One-way fingerprint of the deleted username   | String    | 64               | Not Null, Unique |
+| username_sha256 | One-way fingerprint of the deleted username (hex SHA-256, 64 characters) | String    | -                | Primary Key      |
 | deleted_at      | When the account was deleted                  | DateTime  | -                | Not Null         |
 
 **Constraints:** `username_sha256` identifies the row.
